@@ -1,14 +1,43 @@
 import streamlit as st
+import base64
+ 
+st.set_page_config(layout="wide")
+ 
+def get_base64_image(image_path):
+     with open(image_path, "rb") as f:
+         data = f.read()
+     return base64.b64encode(data).decode()
+ 
+image_path = r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\bg_for_shopper.jpg"
+encoded = get_base64_image(image_path)
+ 
+ # Inject CSS to add the background
+st.markdown(
+     f"""
+     <style>
+     .stApp {{
+         background-image: url("data:image/webp;base64,{encoded}");
+         background-size: cover;
+         background-repeat: no-repeat;
+         background-attachment: fixed;
+         background-position: center;
+     }}
+     </style>
+     """,
+     unsafe_allow_html=True
+)
+
+import streamlit as st
 import pandas as pd
 import pickle
 
 # ----------- Load Data Functions -----------
 @st.cache_data
 def load_product_data():
-    df = pd.read_csv(r"C:\Users\user\OneDrive\Documents\guvi\guvi project 1\fourth project\online_retail.csv")
+    df = pd.read_csv(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\online_retail.csv")
     products = df[['Description']].dropna().drop_duplicates().reset_index(drop=True)
 
-    with open(r"C:\Users\user\OneDrive\Documents\guvi\guvi project 1\fourth project\item_similarity.pkl", "rb") as f:
+    with open(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\item_similarity.pkl", "rb") as f:
         similarity = pickle.load(f)
 
     # Align product list with similarity matrix
@@ -21,7 +50,7 @@ def load_product_data():
 
 @st.cache_resource
 def load_cluster_model():
-    with open(r"C:\Users\user\OneDrive\Documents\guvi\guvi project 1\fourth project\rfm_cluster_model_v2.pkl", "rb") as f:
+    with open(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\rfm_cluster_model.pkl", "rb") as f:
         model_dict = pickle.load(f)
     scaler = model_dict["scaler"]
     kmeans = model_dict["kmeans"]
@@ -33,7 +62,26 @@ page = st.sidebar.radio("Navigate", ["Home", "Recommendation", "Clustering"], ke
 
 # ----------- Pages -----------
 if page == "Home":
-    st.title("📦 Welcome to the Retail AI Dashboard")
+    st.markdown("""
+    <div style="
+        background-color: black;
+        border-radius: 16px;
+        padding: 18px 8px;
+        margin-bottom: 24px;
+        text-align: center;
+        display: inline-block;
+        width: 100%;
+    ">
+        <h1 style="
+            color: white;
+            -webkit-text-stroke: 2px greeen;
+            font-weight: bold;
+            margin: 0;
+        ">
+            📦 Welcome to the Retail AI Dashboard
+        </h1>
+    </div>
+""", unsafe_allow_html=True)
     st.markdown("Use the sidebar to explore product recommendations and customer segmentation.")
 
 # ------------------ RECOMMENDATION ------------------
