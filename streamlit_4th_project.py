@@ -8,7 +8,7 @@ def get_base64_image(image_path):
          data = f.read()
      return base64.b64encode(data).decode()
  
-image_path = r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\bg_for_shopper.jpg"
+image_path = r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\bg_for_shopper.jpg"
 encoded = get_base64_image(image_path)
  
  # Inject CSS to add the background
@@ -28,122 +28,165 @@ st.markdown(
 )
 
 import streamlit as st
+import joblib
 import pandas as pd
-import pickle
+import numpy as np
 
-# ----------- Load Data Functions -----------
-@st.cache_data
-def load_product_data():
-    df = pd.read_csv(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\online_retail.csv")
-    products = df[['Description']].dropna().drop_duplicates().reset_index(drop=True)
+# -------------------------------
+# Page Config
+# -------------------------------
+st.set_page_config(page_title="Shopper Spectrum Streamlit", layout="wide")
 
-    with open(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\item_similarity.pkl", "rb") as f:
-        similarity = pickle.load(f)
-
-    # Align product list with similarity matrix
-    if len(products) > len(similarity):
-        products = products.iloc[:len(similarity)]
-    elif len(products) < len(similarity):
-        similarity = similarity[:len(products)]
-
-    return products, similarity
-
+# -------------------------------
+# Load Models (SAFE LOAD)
+# -------------------------------
 @st.cache_resource
-def load_cluster_model():
-    with open(r"C:\Users\user\Documents\guvi\guvi project 1\fourth project\rfm_cluster_model.pkl", "rb") as f:
-        model_dict = pickle.load(f)
-    scaler = model_dict["scaler"]
-    kmeans = model_dict["kmeans"]
-    return scaler, kmeans
+def load_models():
+    clustering_model = joblib.load(r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\kmeans_rfm_model.pkl")
+    scaler = joblib.load(r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\rfm_scaler.pkl")
+    cluster_labels = joblib.load(r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\cluster_labels.pkl")
+    similarity = joblib.load(r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\product_similarity_matrix.pkl")
+    products = pd.read_csv(r"C:\Users\user\Documents\guvi\guvi project 1\fourth_project\product_similarity_data.csv")
+    return clustering_model, scaler, cluster_labels, similarity, products
 
-# ----------- Main App Navigation -----------
-st.sidebar.title("🧠 Retail AI App")
-page = st.sidebar.radio("Navigate", ["Home", "Recommendation", "Clustering"], key="nav_radio")
+clustering_model, scaler, cluster_labels, similarity, products = load_models()
 
-# ----------- Pages -----------
+# -------------------------------
+# Sidebar Navigation
+# -------------------------------
+st.sidebar.title("📊 Dashboard")
+page = st.sidebar.radio(
+    "Go to",
+    ["Home", "Customer Segmentation", "Product Recommendation"]
+)
+
+# -------------------------------
+# Styling
+# -------------------------------
+st.markdown("""
+<style>
+.stButton>button {
+    background-color: #ff4b4b;
+    color: white;
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------
+# HOME PAGE
+# -------------------------------
 if page == "Home":
     st.markdown("""
     <div style="
         background-color: black;
         border-radius: 16px;
-        padding: 18px 8px;
-        margin-bottom: 24px;
+        padding: 10px 6px;
+        margin-bottom: 18px;
         text-align: center;
         display: inline-block;
         width: 100%;
     ">
         <h1 style="
             color: white;
-            -webkit-text-stroke: 2px greeen;
+            -webkit-text-stroke: 2px blue;
             font-weight: bold;
             margin: 0;
         ">
-            📦 Welcome to the Retail AI Dashboard
+            📦 Welcome to Shopper Spectrum
         </h1>
     </div>
 """, unsafe_allow_html=True)
-    st.markdown("Use the sidebar to explore product recommendations and customer segmentation.")
+    
 
-# ------------------ RECOMMENDATION ------------------
-elif page == "Recommendation":
-    st.title("🔎 Product Recommendation")
+    st.markdown("""
+    ### 🔍 Features:
+    - 📊 Customer Segmentation (RFM + KMeans)
+    - 🎯 Product Recommendation (Collaborative Filtering)
 
-    products_df, similarity_matrix = load_product_data()
-    product_names = products_df['Description'].tolist()
-    selected_product = st.selectbox("Select a product:", product_names)
+    ### 💡 Use Case:
+    - Identify customer value
+    - Recommend similar products
+    """)
 
-    if st.button("Recommend"):
-        try:
-            index = product_names.index(selected_product)
-            distances = similarity_matrix[index]
-            top_indices = sorted(list(enumerate(distances)), key=lambda x: x[1], reverse=True)[1:6]
+# -------------------------------
+# CUSTOMER SEGMENTATION
+# -------------------------------
+elif page == "Customer Segmentation":
+    st.title("📊 Customer Segmentation")
 
-            st.subheader("Recommended Products:")
-            for i in top_indices:
-                st.write(f"- {product_names[i[0]]}")
-        except Exception as e:
-            st.error(f"Recommendation failed: {e}")
+    col1, col2, col3 = st.columns(3)
 
-# ------------------ CLUSTERING ------------------
-elif page == "Clustering":
-    st.title("🧬 Customer Segmentation")
+    with col1:
+        recency = st.number_input("Recency (days)", min_value=0, max_value=400, value=50)
 
-    recency = st.number_input("Recency (days since last purchase)", min_value=0, value=30)
-    frequency = st.number_input("Frequency (number of purchases)", min_value=1, value=5)
-    monetary = st.number_input("Monetary (total spend)", min_value=1.0, value=1000.0, step=100.0)
+    with col2:
+        frequency = st.number_input("Frequency", min_value=1, max_value=100, value=5)
+
+    with col3:
+        monetary = st.number_input("Monetary", min_value=0.0, max_value=200000.0, value=1000.0)
 
     if st.button("Predict Segment"):
+
+        # ✅ Correct input format
+        input_data = np.array([[recency, frequency, monetary]], dtype=float)
+
+        # ⚠️ Uncomment ONLY if used during training
+        # input_data = np.log1p(input_data)
+
+        # Scale
+        scaled_data = scaler.transform(input_data)
+
+        # Predict
+        cluster = int(clustering_model.predict(scaled_data)[0])
+
+        # Get label
+        segment = cluster_labels.get(cluster, "Unknown")
+
+        st.success(f"Cluster: {cluster}")
+        st.info(f"Segment: {segment}")
+
+        
+
+# -------------------------------
+# PRODUCT RECOMMENDATION
+# -------------------------------
+elif page == "Product Recommendation":
+    st.title("🎯 Product Recommender")
+
+    # Clean product list
+    product_list = products['Description'].dropna().unique()
+    product_list.sort()
+
+    # Dropdown selection
+    selected_product = st.selectbox("Select a Product", product_list)
+
+    def recommend(product):
         try:
-            # Load the saved scaler and model
-            scaler, model = load_cluster_model()
+            idx = products[products['Description'] == product].index[0]
+            distances = similarity[idx]
 
-            # Match column names used during training
-            input_data = pd.DataFrame(
-                [[recency, frequency, monetary]],
-                columns=['Recency', 'Frequency', 'Monetary']
-            )
+            product_indices = sorted(
+                list(enumerate(distances)),
+                key=lambda x: x[1],
+                reverse=True
+            )[1:6]
 
-            # Transform and predict
-            scaled_input = scaler.transform(input_data)
-            segment = model.predict(scaled_input)[0]
+            recommended_products = [
+                products.iloc[i[0]].Description for i in product_indices
+            ]
 
-            # ✅ Label mapping based on your actual cluster centers
-            segment_labels = {
-    0: "High-Value Customer",
-    1: "At-Risk Customer",       # ✅ Cluster 1 = highest recency = worst
-    2: "Top Spender",
-    3: "Regular Customer"
-}
+            return recommended_products
 
+        except:
+            return []
 
-            # ✅ Show prediction and label
-            st.write("🔢 Predicted cluster number:", segment)
-            st.success(f"🧾 This customer belongs to: {segment_labels.get(segment, 'Unknown')}")
+    if st.button("Get Recommendations"):
+        recommendations = recommend(selected_product)
 
-        except Exception as e:
-            st.error(f"Prediction failed: {e}")
-
-
-
-
-
+        if len(recommendations) == 0:
+            st.error("No recommendations found!")
+        else:
+            st.subheader("Recommended Products:")
+            for prod in recommendations:
+                st.markdown(f"✅ {prod}")
